@@ -44,40 +44,65 @@ end
 end
 
 function plotVerification(model, R)
+bg   = [0.08 0.08 0.10];
+fg   = [0.92 0.92 0.94];
+gr   = [0.35 0.35 0.40];
+cTst = [0.30 0.75 1.00];
+cRef = [1.00 0.50 0.35];
+cOk  = [0.25 0.85 0.45];
+cBad = [0.95 0.35 0.30];
+
 figure('Name', sprintf('Verification - %s', model.userId), ...
-       'Color', 'w', 'Position', [100 100 1100 620]);
+       'Color', bg, 'InvertHardcopy', 'off', 'Position', [100 100 1100 620]);
 
-subplot(2,3,1);
-imshow(~model.refImgs{1}); title('Reference (genuine)');
+ax = subplot(2,3,1);
+imshow(model.refImgs{1});
+title('Reference (genuine)'); darkAxes(ax, fg, bg, gr);
 
-subplot(2,3,2);
-imshow(~R.B);
-title(sprintf('Questioned sample'));
+ax = subplot(2,3,2);
+imshow(R.B);
+title('Questioned sample'); darkAxes(ax, fg, bg, gr);
 
-subplot(2,3,3);
-Ov = cat(3, double(~model.refImgs{1}), double(~R.B), ones(size(R.B)));
-imshow(Ov); title('Overlay  (red = ref, green = test)');
+ax = subplot(2,3,3);
+Ov = cat(3, double(model.refImgs{1}), double(R.B), zeros(size(R.B)));
+imshow(Ov);
+title('Overlay  (red = ref, green = test, yellow = match)');
+darkAxes(ax, fg, bg, gr);
 
-subplot(2,3,4);
-plot(R.parts.projVfull, 'b', 'LineWidth', 1.2); hold on;
+ax = subplot(2,3,4);
+plot(R.parts.projVfull, 'Color', cTst, 'LineWidth', 1.4); hold on;
 [~, ~, refParts] = extractFeatures(model.refImgs{1});
-plot(refParts.projVfull, 'r--', 'LineWidth', 1);
+plot(refParts.projVfull, '--', 'Color', cRef, 'LineWidth', 1.2);
 title('Vertical projection profile'); xlabel('column'); ylabel('ink');
-legend('test','reference','Location','best'); grid on; axis tight;
+lg = legend('test','reference','Location','best');
+set(lg, 'TextColor', fg, 'Color', bg, 'EdgeColor', gr);
+grid on; axis tight; darkAxes(ax, fg, bg, gr);
 
-subplot(2,3,5);
-stem(R.parts.fftV, 'b', 'filled'); hold on;
-stem(refParts.fftV, 'r');
-title('FFT magnitude of profile'); xlabel('harmonic'); grid on; axis tight;
+ax = subplot(2,3,5);
+stem(R.parts.fftV, 'filled', 'Color', cTst, 'MarkerFaceColor', cTst); hold on;
+stem(refParts.fftV, 'Color', cRef);
+title('FFT magnitude of profile'); xlabel('harmonic');
+grid on; axis tight; darkAxes(ax, fg, bg, gr);
 
-subplot(2,3,6);
-barh(1, R.score, 'FaceColor', ternary(R.isAuthentic, [0.2 0.7 0.3], [0.85 0.25 0.2]));
+ax = subplot(2,3,6);
+barh(1, R.score, 'FaceColor', ternary(R.isAuthentic, cOk, cBad), ...
+     'EdgeColor', 'none');
 hold on;
-plot([model.thr model.thr], [0.5 1.5], 'k--', 'LineWidth', 2);
+plot([model.thr model.thr], [0.5 1.5], '--', 'Color', fg, 'LineWidth', 2);
 xlim([0 1]); ylim([0.5 1.5]); set(gca, 'YTick', []);
 xlabel('similarity score');
-title(sprintf('%s   (%.1f%% confidence)', R.decision, R.confidence));
-grid on;
+title(sprintf('%s   (%.1f%% confidence)', R.decision, R.confidence), ...
+      'Color', ternary(R.isAuthentic, cOk, cBad));
+grid on; darkAxes(ax, fg, bg, gr);
+set(get(ax, 'Title'), 'Color', ternary(R.isAuthentic, cOk, cBad));
+end
+
+function darkAxes(ax, fg, bg, gr)
+set(ax, 'Color', bg, 'XColor', fg, 'YColor', fg, 'ZColor', fg, ...
+        'GridColor', gr, 'MinorGridColor', gr, 'GridAlpha', 0.5);
+set(get(ax, 'Title'),  'Color', fg);
+set(get(ax, 'XLabel'), 'Color', fg);
+set(get(ax, 'YLabel'), 'Color', fg);
 end
 
 function v = ternary(c, a, b)

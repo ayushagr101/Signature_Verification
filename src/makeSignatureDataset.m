@@ -92,7 +92,7 @@ press  = 0.75 + 0.25*sin(3*t + P.phase(1));
 xi = round(x); yi = round(y);
 ok = ~lift & xi >= 1 & xi <= Wd & yi >= 1 & yi <= H;
 idx = sub2ind([H Wd], yi(ok), xi(ok));
-canvas(idx) = max(canvas(idx), press(ok)');
+canvas(idx) = max(canvas(idx), press(ok));
 
 r = max(round(P.thick), 1);
 [gx, gy] = meshgrid(-r:r, -r:r);

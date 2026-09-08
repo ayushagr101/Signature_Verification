@@ -7,7 +7,13 @@ if ~exist(resultsDir, 'dir'), mkdir(resultsDir); end
 
 writers = dir(fullfile(dataDir, 'writer*'));
 writers = writers([writers.isdir]);
-if isempty(writers)
+hasImages = false;
+for w = 1:numel(writers)
+    if ~isempty(dir(fullfile(dataDir, writers(w).name, '*.png')))
+        hasImages = true; break;
+    end
+end
+if ~hasImages
     fprintf('No dataset found - generating a synthetic one...\n\n');
     makeSignatureDataset(dataDir, 3, 8, 5, 7);
     writers = dir(fullfile(dataDir, 'writer*'));

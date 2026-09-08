@@ -231,3 +231,13 @@ catch
 end
 if ~isfinite(h), h = 0; end
 end
+
+function s = skewness0(x)
+x = x(:) - mean(x); sd = std(x);
+if sd <= eps, s = 0; else, s = mean(x.^3) / sd^3; end
+end
+
+function k = kurtosis0(x)
+x = x(:) - mean(x); sd = std(x);
+if sd <= eps, k = 0; else, k = mean(x.^4) / sd^4 - 3; end
+end
