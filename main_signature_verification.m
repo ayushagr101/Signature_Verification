@@ -112,32 +112,46 @@ fprintf('  equal error rate (EER): %.2f %%  at threshold %.3f\n', ...
         EER, th(ke));
 fprintf('============================================================\n');
 
-figure('Name','Score distribution','Color','w');
+BG = [0.08 0.08 0.10];
+FG = [0.92 0.92 0.94];
+GR = [0.35 0.35 0.40];
+CG = [0.25 0.85 0.45];
+CF = [0.95 0.35 0.30];
+CB = [0.30 0.75 1.00];
+
+figure('Name','Score distribution','Color',BG,'InvertHardcopy','off');
 edges = 0:0.025:1;
-histogram(allScores(gIdx), edges, 'FaceColor', [0.2 0.7 0.3], ...
-          'FaceAlpha', 0.65); hold on;
-histogram(allScores(fIdx), edges, 'FaceColor', [0.85 0.25 0.2], ...
-          'FaceAlpha', 0.65);
-yl = ylim; plot([th(ke) th(ke)], yl, 'k--', 'LineWidth', 2);
-xlabel('fused similarity score'); ylabel('count');
-legend('genuine','forged','EER threshold','Location','northwest');
-title('Genuine vs forged score separation'); grid on;
+histogram(allScores(gIdx), edges, 'FaceColor', CG, ...
+          'EdgeColor', BG, 'FaceAlpha', 0.75); hold on;
+histogram(allScores(fIdx), edges, 'FaceColor', CF, ...
+          'EdgeColor', BG, 'FaceAlpha', 0.75);
+yl = ylim; plot([th(ke) th(ke)], yl, '--', 'Color', FG, 'LineWidth', 2);
+xlabel('fused similarity score','Color',FG);
+ylabel('count','Color',FG);
+lg = legend('genuine','forged','EER threshold','Location','northwest');
+set(lg, 'TextColor', FG, 'Color', BG, 'EdgeColor', GR);
+title('Genuine vs forged score separation','Color',FG); grid on;
+set(gca,'Color',BG,'XColor',FG,'YColor',FG,'GridColor',GR,'GridAlpha',0.5);
 saveas(gcf, fullfile(resultsDir, 'score_distribution.png'));
 
-figure('Name','FAR / FRR / ROC','Color','w');
+figure('Name','FAR / FRR / ROC','Color',BG,'InvertHardcopy','off');
 subplot(1,2,1);
-plot(th, 100*far, 'r', 'LineWidth', 1.6); hold on;
-plot(th, 100*frr, 'b', 'LineWidth', 1.6);
-plot(th(ke), 100*far(ke), 'ko', 'MarkerFaceColor', 'k');
-xlabel('threshold'); ylabel('error rate (%)');
-legend('FAR','FRR','EER','Location','best');
-title(sprintf('EER = %.2f %%', EER)); grid on;
+plot(th, 100*far, 'Color', CF, 'LineWidth', 1.8); hold on;
+plot(th, 100*frr, 'Color', CB, 'LineWidth', 1.8);
+plot(th(ke), 100*far(ke), 'o', 'Color', FG, 'MarkerFaceColor', FG);
+xlabel('threshold','Color',FG); ylabel('error rate (%)','Color',FG);
+lg = legend('FAR','FRR','EER','Location','best');
+set(lg, 'TextColor', FG, 'Color', BG, 'EdgeColor', GR);
+title(sprintf('EER = %.2f %%', EER),'Color',FG); grid on;
+set(gca,'Color',BG,'XColor',FG,'YColor',FG,'GridColor',GR,'GridAlpha',0.5);
 
 subplot(1,2,2);
-plot(100*far, 100*(1-frr), 'b', 'LineWidth', 1.8); hold on;
-plot([0 100],[0 100],'k:');
-xlabel('FAR (%)'); ylabel('genuine acceptance rate (%)');
-title('ROC curve'); grid on; axis([0 100 0 100]);
+plot(100*far, 100*(1-frr), 'Color', CB, 'LineWidth', 2); hold on;
+plot([0 100],[0 100],':','Color',GR,'LineWidth',1.2);
+xlabel('FAR (%)','Color',FG);
+ylabel('genuine acceptance rate (%)','Color',FG);
+title('ROC curve','Color',FG); grid on; axis([0 100 0 100]);
+set(gca,'Color',BG,'XColor',FG,'YColor',FG,'GridColor',GR,'GridAlpha',0.5);
 saveas(gcf, fullfile(resultsDir, 'roc_far_frr.png'));
 
 save(fullfile(resultsDir, 'results.mat'), ...
