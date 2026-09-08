@@ -1,16 +1,3 @@
-%% A DSP-BASED BANK SIGNATURE VERIFICATION SYSTEM
-%  Digital Signal Processing Lab - main driver script
-%
-%  Ashish Singh (20244045), Ayush Agarwal (20244047),
-%  Ayush Jadaun (20244048), Ayush Kaushal (20244049)
-%
-%  RUN THIS FILE.  It will
-%    1. build a synthetic signature dataset if data/ is empty
-%       (drop your own scanned images in data/writerNN/ to use real data),
-%    2. enrol each writer from a few genuine specimens,
-%    3. verify held-out genuine samples and both kinds of forgery,
-%    4. report FAR / FRR / accuracy / EER and draw the ROC curve.
-
 clear; close all; clc;
 addpath(fullfile(fileparts(mfilename('fullpath')), 'src'));
 
@@ -18,7 +5,6 @@ dataDir    = fullfile(pwd, 'data');
 resultsDir = fullfile(pwd, 'results');
 if ~exist(resultsDir, 'dir'), mkdir(resultsDir); end
 
-%% ---------------------------------------------------------------- data --
 writers = dir(fullfile(dataDir, 'writer*'));
 writers = writers([writers.isdir]);
 if isempty(writers)
@@ -28,16 +14,15 @@ if isempty(writers)
     writers = writers([writers.isdir]);
 end
 
-nRefs = 4;                 % specimen signatures the bank holds on file
+nRefs = 4;
 
-allScores = [];            % fused score
-allLabels = [];            % 1 = genuine, 0 = forgery
-allTypes  = {};            % 'genuine' | 'skilled' | 'random'
-allDec    = [];            % 1 = accepted as authentic
+allScores = [];
+allLabels = [];
+allTypes  = {};
+allDec    = [];
 
 models = struct('userId', {}, 'thr', {});
 
-%% ------------------------------------------------------ enrol + verify --
 for w = 1:numel(writers)
     wdir = fullfile(dataDir, writers(w).name);
 
@@ -53,12 +38,12 @@ for w = 1:numel(writers)
         continue;
     end
 
-    refs  = gen(1:nRefs);              % enrolment specimens
-    tests = gen(nRefs+1:end);          % held-out genuine test samples
+    refs  = gen(1:nRefs);
+    tests = gen(nRefs+1:end);
 
     fprintf('\n================ %s ================\n', writers(w).name);
     model = enrollUser(refs, writers(w).name, struct());
-    models(end+1) = struct('userId', model.userId, 'thr', model.thr); %#ok<SAGROW>
+    models(end+1) = struct('userId', model.userId, 'thr', model.thr);
 
     probes = [tests, skf, rnf];
     labels = [ones(1, numel(tests)), zeros(1, numel(skf) + numel(rnf))];
@@ -68,13 +53,12 @@ for w = 1:numel(writers)
 
     for i = 1:numel(probes)
         R = verifySignature(model, probes{i}, false);
-        allScores(end+1) = R.score;          %#ok<SAGROW>
-        allLabels(end+1) = labels(i);        %#ok<SAGROW>
-        allTypes{end+1}  = types{i};         %#ok<SAGROW>
-        allDec(end+1)    = R.isAuthentic;    %#ok<SAGROW>
+        allScores(end+1) = R.score;
+        allLabels(end+1) = labels(i);
+        allTypes{end+1}  = types{i};
+        allDec(end+1)    = R.isAuthentic;
     end
 
-    % Keep one worked example for the report figure.
     if w == 1
         verifySignature(model, tests{1}, true);
         saveas(gcf, fullfile(resultsDir, 'example_genuine.png'));
@@ -84,12 +68,11 @@ for w = 1:numel(writers)
     end
 end
 
-%% ------------------------------------------------------------ metrics ---
 gIdx = allLabels == 1;
 fIdx = allLabels == 0;
 
-FRR = 100 * mean(~allDec(gIdx));       % genuine wrongly rejected
-FAR = 100 * mean( allDec(fIdx));       % forgery wrongly accepted
+FRR = 100 * mean(~allDec(gIdx));
+FAR = 100 * mean( allDec(fIdx));
 ACC = 100 * mean(allDec == allLabels);
 
 fprintf('\n==================== SYSTEM PERFORMANCE ====================\n');
@@ -111,7 +94,6 @@ if any(isRn)
         mean(allScores(isRn)), 100*mean(allDec(isRn)));
 end
 
-% ---- ROC / EER sweep over a global threshold ---------------------------
 th  = linspace(0, 1, 501);
 far = zeros(size(th)); frr = zeros(size(th));
 for k = 1:numel(th)
@@ -124,7 +106,6 @@ fprintf('  equal error rate (EER): %.2f %%  at threshold %.3f\n', ...
         EER, th(ke));
 fprintf('============================================================\n');
 
-%% ------------------------------------------------------------- figures --
 figure('Name','Score distribution','Color','w');
 edges = 0:0.025:1;
 histogram(allScores(gIdx), edges, 'FaceColor', [0.2 0.7 0.3], ...

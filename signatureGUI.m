@@ -1,14 +1,4 @@
 function signatureGUI()
-%SIGNATUREGUI  Minimal front-end for the DSP bank signature verifier.
-%
-%   Usage
-%     >> signatureGUI
-%
-%   1. "Enrol writer"  - pick a folder holding 3+ genuine specimen images
-%                        (e.g. data/writer01, selecting the genuine_*.png).
-%   2. "Load test"     - pick the questioned signature image.
-%   3. "Verify"        - runs preprocessing, feature extraction, matching
-%                        and shows AUTHENTIC / FORGED with the score.
 
 addpath(fullfile(fileparts(mfilename('fullpath')), 'src'));
 
@@ -61,7 +51,6 @@ S.txt = uicontrol('Style','text','Parent',S.fig,'Units','normalized', ...
 
 guidata(S.fig, S);
 
-% ------------------------------------------------------------ callbacks --
     function onEnrol(~,~)
         S = guidata(S.fig);
         d = uigetdir(pwd, 'Select the folder holding the genuine specimens');

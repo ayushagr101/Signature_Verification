@@ -23,10 +23,36 @@ data/writer01/forged_skilled_01.png ...
 data/writer01/forged_random_01.png ...
 ```
 
+## Registering a customer
+
+Registration (enrolment) happens once, when the account is opened. The
+customer gives 3–6 specimen signatures; the system reduces them to a
+statistical model stored under `models/<accountId>.mat`. Later, any cheque
+is checked against that stored model.
+
+```matlab
+>> registerPerson('ACC-1001', 'data/writer01')   % folder of specimens
+>> registerPerson('ACC-1002')                    % or pick files in a dialog
+
+>> listRegistered                                % who is on file
+
+>> R = checkSignature('ACC-1001', 'cheque_scan.png', true);
+>> R.decision      % 'AUTHENTIC' or 'FORGED'
+>> R.score, R.threshold, R.confidence
+```
+
+What the model actually stores: the feature matrix of the specimens, the
+per-feature mean and standard deviation (that writer's natural variability),
+the intra-class distance scale `d0`, the calibrated threshold, and the
+preprocessed specimen images (needed by the cross-correlation term).
+
 ## Files
 
 | File | Role |
 |---|---|
+| `registerPerson.m` | Enrol an account and save its model to `models/` |
+| `checkSignature.m` | Verify a questioned signature against a saved account |
+| `listRegistered.m` | List enrolled accounts |
 | `main_signature_verification.m` | Driver: enrol → verify → FAR/FRR/EER/ROC |
 | `signatureGUI.m` | GUI: enrol writer, load test image, verify |
 | `src/preprocessSignature.m` | Grayscale, median filter, Otsu, despeckle, deskew, crop, resize |
