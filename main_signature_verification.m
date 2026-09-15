@@ -13,6 +13,8 @@ if exist(tunedFile, 'file')
     T = load(tunedFile, 'best');
     enrolOpts.weights = T.best.weights;
     enrolOpts.kThresh = T.best.kThresh;
+    enrolOpts.minThr  = T.best.minThr;
+    enrolOpts.maxThr  = T.best.maxThr;
     fprintf('Using tuned parameters: weights [%.1f %.1f], kThresh %.2f\n', ...
             enrolOpts.weights(1), enrolOpts.weights(2), enrolOpts.kThresh);
 else

@@ -10,7 +10,8 @@ opts = setDefault(opts, 'pad',        4);
 if ischar(I) || isstring(I)
     info.file = char(I);
     [I, map] = imread(char(I));
-    if ~isempty(map)
+    if ~isempty(map) && ndims(I) == 2
+        if islogical(I), I = uint8(I); end
         I = ind2rgb(I, map);
     end
 else

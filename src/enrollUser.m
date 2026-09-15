@@ -5,8 +5,8 @@ if nargin < 3, opts = struct(); end
 if ~isfield(opts, 'prep'),    opts.prep    = struct(); end
 if ~isfield(opts, 'weights'), opts.weights = [0.6 0.4]; end
 if ~isfield(opts, 'kThresh'), opts.kThresh = 1.4; end
-if ~isfield(opts, 'minThr'),  opts.minThr  = 0.35; end
-if ~isfield(opts, 'maxThr'),  opts.maxThr  = 0.90; end
+if ~isfield(opts, 'minThr'),  opts.minThr  = 0.05; end
+if ~isfield(opts, 'maxThr'),  opts.maxThr  = 0.95; end
 if ~isfield(opts, 'mode'),    opts.mode    = 'dsp'; end
 if ~isfield(opts, 'classifier'), opts.classifier = []; end
 
@@ -33,11 +33,8 @@ for i = 1:N
 end
 [~, featNames] = extractFeatures(refImgs{1});
 
-mu    = mean(F, 2);
-sigma = std(F, 0, 2);
-
-floorVal = 0.05 * max(std(F(:)), eps);
-sigma = max(sigma, max(floorVal, 1e-3));
+mu = mean(F, 2);
+[sigma, d0, dlist] = classStats(F);
 
 model.userId    = userId;
 model.F         = F;
@@ -50,14 +47,7 @@ model.prep      = opts.prep;
 model.nSamples  = N;
 model.createdAt = datestr(now, 'yyyy-mm-dd HH:MM:SS');
 
-dlist = [];
-for i = 1:N
-    for j = i+1:N
-        D = (F(:,i) - F(:,j)) ./ sigma;
-        dlist(end+1) = sqrt(mean(D.^2));
-    end
-end
-model.d0 = max(mean(dlist), 1e-3);
+model.d0 = d0;
 model.intraDistances = dlist;
 
 model.mode = 'dsp';
@@ -73,11 +63,8 @@ if ~isempty(opts.classifier)
     if strcmpi(model.mode, 'dsp'), model.mode = 'hybrid'; end
 end
 
-loo = zeros(1, N);
-for i = 1:N
-    S = signatureScore(model, F(:, i), refImgs{i}, i);
-    loo(i) = S.score;
-end
+L = looScores(model);
+loo = [L.score];
 thr = mean(loo) - opts.kThresh * std(loo);
 thr = min(max(thr, opts.minThr), opts.maxThr);
 

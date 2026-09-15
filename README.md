@@ -56,8 +56,14 @@ preprocessed specimen images (needed by the cross-correlation term).
 | `main_signature_verification.m` | Driver: enrol → verify → FAR/FRR/EER/ROC |
 | `signatureGUI.m` | GUI: enrol writer, load test image, verify |
 | `src/preprocessSignature.m` | Grayscale, median filter, Otsu, despeckle, deskew, crop, resize |
-| `src/extractFeatures.m` | 121-D feature vector across 9 DSP families |
+| `src/extractFeatures.m` | 137-D feature vector across 9 DSP families |
 | `src/enrollUser.m` | Builds the reference model + calibrates the threshold |
+| `src/classStats.m`, `src/looScores.m` | Per-writer statistics and leak-free leave-one-out scoring |
+| `src/evaluateSystem.m` | Enrol → verify → FAR/FRR/EER for one scoring mode |
+| `src/classifierScore.m` | Probability from the trained pair classifier |
+| `trainClassifier.m` | Writer-independent classifier on pair difference vectors |
+| `tuneParameters.m` | Grid-search fusion weights and threshold tightness |
+| `importCEDAR.m` | Convert the CEDAR database into the project layout |
 | `src/signatureScore.m` | Feature distance + normalized cross-correlation fusion |
 | `src/verifySignature.m` | AUTHENTIC / FORGED decision + analysis plots |
 | `src/makeSignatureDataset.m` | Synthetic signature generator |
@@ -70,7 +76,7 @@ morphological closing → principal-axis deskew → bounding-box crop →
 aspect-preserving resize to a 128×256 canvas. Position, size and slant
 invariance all come from this stage.
 
-**Feature extraction** (121 features):
+**Feature extraction** (137 features):
 
 1. Geometric/statistical — ink density, centroid, spread, aspect, stroke
    thickness, loop count
@@ -96,7 +102,7 @@ strokes so small displacements are tolerated).
 
 **Decision** — the threshold is not a global constant. It is calibrated per
 writer by leave-one-out scoring of the enrolment samples:
-`thr = mean(LOO) − 1.4·std(LOO)`, clamped to [0.35, 0.90]. Consistent
+`thr = mean(LOO) − k·std(LOO)`, clamped to [0.05, 0.95], where the LOO statistics (σ, d₀) are rebuilt from the other references each time so the held-out sample is not favoured. Consistent
 signers get a strict threshold, erratic signers a lenient one.
 
 **Evaluation** — FAR, FRR, accuracy, EER, score histograms and the ROC
@@ -140,8 +146,8 @@ The DSP system is *writer-dependent*: each account has its own template and
 nothing is learned across writers. `trainClassifier` adds a
 *writer-independent* layer on top of the same DSP features:
 
-1. For every (enrolled model, test signature) pair it builds a 126-D
-   **difference vector** — the z-scored |f_test − μ_ref| for all 121 features,
+1. For every (enrolled model, test signature) pair it builds a 142-D
+   **difference vector** — the z-scored |f_test − μ_ref| for all 137 features,
    plus min/median/max reference distance, feature similarity and
    cross-correlation.
 2. It trains one classifier on those vectors: label 1 = genuine pair,

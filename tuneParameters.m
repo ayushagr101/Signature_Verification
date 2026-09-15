@@ -3,8 +3,11 @@ function best = tuneParameters(tuneDir, nRefs)
 root = fileparts(mfilename('fullpath'));
 addpath(fullfile(root, 'src'));
 
-if nargin < 1 || isempty(tuneDir), tuneDir = fullfile(root, 'data_tune'); end
-if nargin < 2 || isempty(nRefs),   nRefs   = 4; end
+if nargin < 1 || isempty(tuneDir)
+    tuneDir = fullfile(root, 'data_train');
+    if ~exist(tuneDir, 'dir'), tuneDir = fullfile(root, 'data_tune'); end
+end
+if nargin < 2 || isempty(nRefs),   nRefs   = 6; end
 
 resultsDir = fullfile(root, 'results');
 if ~exist(resultsDir, 'dir'), mkdir(resultsDir); end
@@ -19,8 +22,8 @@ if isempty(writers)
 end
 
 W1 = 0:0.1:1;
-K  = 0:0.25:3;
-minThr = 0.35; maxThr = 0.90;
+K  = 0:0.25:6;
+minThr = 0.05; maxThr = 0.95;
 
 fprintf('\nCollecting score components for %d writers...\n', numel(writers));
 data = struct('looF', {}, 'looC', {}, 'pF', {}, 'pC', {}, 'lab', {});
@@ -38,12 +41,8 @@ for w = 1:numel(writers)
 
     model = enrollUser(gen(1:nRefs), writers(w).name, struct());
 
-    N = model.nSamples;
-    looF = zeros(1, N); looC = zeros(1, N);
-    for i = 1:N
-        S = signatureScore(model, model.F(:, i), model.refImgs{i}, i);
-        looF(i) = S.featureSim; looC(i) = S.corrSim;
-    end
+    L = looScores(model);
+    looF = [L.featureSim]; looC = [L.corrSim];
 
     probes = [gen(nRefs+1:end), frg];
     lab    = [ones(1, numel(gen) - nRefs), zeros(1, numel(frg))];
@@ -135,7 +134,7 @@ figure('Name', 'Parameter tuning', 'Color', BG, 'InvertHardcopy', 'off', ...
 subplot(1,2,1);
 imagesc(K, W1, 100*HTER); hold on;
 plot(K(gb), W1(ga), 'o', 'MarkerSize', 12, 'LineWidth', 2, 'Color', FG);
-plot(1.4, 0.6, 'x', 'MarkerSize', 12, 'LineWidth', 2, 'Color', [1 0.6 0.2]);
+plot(min(1.4, max(K)), 0.6, 'x', 'MarkerSize', 12, 'LineWidth', 2, 'Color', [1 0.6 0.2]);
 set(gca, 'YDir', 'normal', 'Color', BG, 'XColor', FG, 'YColor', FG);
 colormap(gca, flipud(parula));
 cb = colorbar; set(cb, 'Color', FG); ylabel(cb, 'HTER (%)', 'Color', FG);

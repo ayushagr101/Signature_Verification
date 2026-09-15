@@ -47,9 +47,9 @@ for w = 1:numel(writers)
         X(i, :) = S.pairFeat(:)';
     end
 
-    for i = 1:nRefs
-        S = signatureScore(model, model.F(:, i), model.refImgs{i}, i);
-        X(end+1, :) = S.pairFeat(:)';
+    L = looScores(model);
+    for i = 1:numel(L)
+        X(end+1, :) = L(i).pairFeat(:)';
         y(end+1, 1) = 1;
     end
 
@@ -126,7 +126,8 @@ end
 
 function clf = fitModel(X, y, method, calibrate)
 mu = mean(X, 1);
-sd = std(X, 0, 1) + 1e-6;
+sd = std(X, 0, 1);
+sd(sd < 1e-8) = 1;
 Xs = bsxfun(@rdivide, bsxfun(@minus, X, mu), sd);
 y  = double(y(:));
 
