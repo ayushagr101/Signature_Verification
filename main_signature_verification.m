@@ -5,6 +5,18 @@ dataDir    = fullfile(pwd, 'data');
 resultsDir = fullfile(pwd, 'results');
 if ~exist(resultsDir, 'dir'), mkdir(resultsDir); end
 
+enrolOpts = struct();
+tunedFile = fullfile(resultsDir, 'tunedParams.mat');
+if exist(tunedFile, 'file')
+    T = load(tunedFile, 'best');
+    enrolOpts.weights = T.best.weights;
+    enrolOpts.kThresh = T.best.kThresh;
+    fprintf('Using tuned parameters: weights [%.1f %.1f], kThresh %.2f  (from %s)\n', ...
+            enrolOpts.weights(1), enrolOpts.weights(2), enrolOpts.kThresh, tunedFile);
+else
+    fprintf('Using default parameters - run tuneParameters to tune them.\n');
+end
+
 writers = dir(fullfile(dataDir, 'writer*'));
 writers = writers([writers.isdir]);
 hasImages = false;
@@ -48,7 +60,7 @@ for w = 1:numel(writers)
     tests = gen(nRefs+1:end);
 
     fprintf('\n================ %s ================\n', writers(w).name);
-    model = enrollUser(refs, writers(w).name, struct());
+    model = enrollUser(refs, writers(w).name, enrolOpts);
     models(end+1) = struct('userId', model.userId, 'thr', model.thr);
 
     probes = [tests, skf, rnf];

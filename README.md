@@ -118,3 +118,18 @@ needed — the Haar transform is implemented directly.
 | `opts.weights` | `enrollUser` | Feature-distance vs correlation balance |
 | `opts.prep.size` | preprocessing canvas | Detail vs speed |
 | `nRefs` | `main_signature_verification.m` | Specimens held on file |
+
+## Tuning the global parameters
+
+The fusion weights and threshold tightness are the only hand-set numbers in
+the system. `tuneParameters` grid-searches them on a **separate** tuning set
+(`data_tune/`, generated with a different seed) so the evaluation numbers
+from `main_signature_verification` stay honest:
+
+```matlab
+>> tuneParameters                   % writes results/tunedParams.mat + tuning.png
+>> main_signature_verification      % now picks up the tuned values automatically
+```
+
+It sweeps feature weight 0..1 and `kThresh` 0..3, reporting FAR / FRR / HTER
+per grid point and the threshold-free EER per weight setting.
