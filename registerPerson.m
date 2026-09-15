@@ -18,6 +18,20 @@ if ~isfield(opts, 'classifier') && exist(clfFile, 'file')
     fprintf('Using trained classifier (hybrid mode).\n');
 end
 
+tunedFile = fullfile(root, 'results', 'tunedParams.mat');
+if ~isfield(opts, 'kThresh') && exist(tunedFile, 'file')
+    T = load(tunedFile, 'best');
+    opts.weights = T.best.weights;
+    opts.minThr  = T.best.minThr;
+    opts.maxThr  = T.best.maxThr;
+    opts.kThresh = T.best.kThresh;
+    if isfield(opts, 'classifier') && isfield(T.best, 'kThreshHybrid') ...
+            && ~isnan(T.best.kThreshHybrid)
+        opts.kThresh = T.best.kThreshHybrid;
+    end
+    fprintf('Using tuned parameters (kThresh %.2f).\n', opts.kThresh);
+end
+
 accountId = char(accountId);
 target = fullfile(modelDir, [safeName(accountId) '.mat']);
 

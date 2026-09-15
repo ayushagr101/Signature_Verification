@@ -26,7 +26,7 @@ K  = 0:0.25:6;
 minThr = 0.05; maxThr = 0.95;
 
 fprintf('\nCollecting score components for %d writers...\n', numel(writers));
-data = struct('looF', {}, 'looC', {}, 'pF', {}, 'pC', {}, 'lab', {});
+data = struct('looF', {}, 'looC', {}, 'pF', {}, 'pC', {}, 'lab', {}, 'looX', {}, 'pX', {});
 
 for w = 1:numel(writers)
     wdir = fullfile(tuneDir, writers(w).name);
@@ -43,18 +43,21 @@ for w = 1:numel(writers)
 
     L = looScores(model);
     looF = [L.featureSim]; looC = [L.corrSim];
+    looX = reshape([L.pairFeat], numel(L(1).pairFeat), [])';
 
     probes = [gen(nRefs+1:end), frg];
     lab    = [ones(1, numel(gen) - nRefs), zeros(1, numel(frg))];
-    pF = zeros(size(probes)); pC = zeros(size(probes));
+    pF = zeros(size(probes)); pC = zeros(size(probes)); pX = [];
     for i = 1:numel(probes)
         B = preprocessSignature(probes{i}, model.prep);
         f = extractFeatures(B);
         S = signatureScore(model, f, B);
         pF(i) = S.featureSim; pC(i) = S.corrSim;
+        pX(i, :) = S.pairFeat(:)';
     end
 
-    data(end+1) = struct('looF', looF, 'looC', looC, 'pF', pF, 'pC', pC, 'lab', lab);
+    data(end+1) = struct('looF', looF, 'looC', looC, 'pF', pF, 'pC', pC, 'lab', lab, ...
+                         'looX', looX, 'pX', pX);
 end
 
 nW = numel(W1); nK = numel(K);
@@ -107,6 +110,49 @@ best.grid     = struct('W1', W1, 'K', K, 'FAR', FAR, 'FRR', FRR, ...
                        'HTER', HTER, 'EER', EER);
 best.tunedOn  = tuneDir;
 best.tunedAt  = datestr(now, 'yyyy-mm-dd HH:MM:SS');
+
+best.kThreshML = NaN; best.kThreshHybrid = NaN;
+best.HTERML = NaN;    best.HTERHybrid = NaN;
+clfFile = fullfile(root, 'models', 'classifier.mat');
+if exist(clfFile, 'file')
+    C = load(clfFile, 'clf'); clf = C.clf;
+    w1 = best.weights(1); w2 = best.weights(2);
+    modeNames = {'ml', 'hybrid'};
+    for mi = 1:2
+        hter = zeros(1, nK); farM = zeros(1, nK); frrM = zeros(1, nK);
+        for b = 1:nK
+            acc = []; lab = [];
+            for d = 1:numel(data)
+                looML = classifierScore(clf, data(d).looX)';
+                pML   = classifierScore(clf, data(d).pX)';
+                looD  = w1*data(d).looF + w2*data(d).looC;
+                pD    = w1*data(d).pF   + w2*data(d).pC;
+                if mi == 1
+                    loo = looML; sc = pML;
+                else
+                    loo = 0.5*looD + 0.5*looML; sc = 0.5*pD + 0.5*pML;
+                end
+                thr = mean(loo) - K(b)*std(loo);
+                thr = min(max(thr, minThr), maxThr);
+                acc = [acc, sc >= thr];
+                lab = [lab, data(d).lab];
+            end
+            farM(b) = mean(acc(lab == 0));
+            frrM(b) = mean(~acc(lab == 1));
+            hter(b) = (farM(b) + frrM(b)) / 2;
+        end
+        [hm, bm] = min(hter);
+        if mi == 1
+            best.kThreshML = K(bm); best.HTERML = hm;
+            best.FARML = farM(bm);  best.FRRML = frrM(bm);
+        else
+            best.kThreshHybrid = K(bm); best.HTERHybrid = hm;
+            best.FARHybrid = farM(bm); best.FRRHybrid = frrM(bm);
+        end
+        fprintf('  %-6s mode: kThresh %.2f -> FAR %.2f %%  FRR %.2f %%  HTER %.2f %%\n', ...
+                modeNames{mi}, K(bm), 100*farM(bm), 100*frrM(bm), 100*hm);
+    end
+end
 
 fprintf('\n==================== TUNING RESULT ====================\n');
 fprintf('  tuned on           : %s  (%d writers)\n', tuneDir, numel(data));

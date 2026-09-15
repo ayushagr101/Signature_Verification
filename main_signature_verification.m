@@ -52,6 +52,14 @@ for m = 1:numel(modes)
     o = enrolOpts;
     o.mode = modes{m};
     if ~strcmp(modes{m}, 'dsp'), o.classifier = clf; end
+    if exist('T', 'var')
+        if strcmp(modes{m}, 'ml') && isfield(T.best, 'kThreshML') && ~isnan(T.best.kThreshML)
+            o.kThresh = T.best.kThreshML;
+        elseif strcmp(modes{m}, 'hybrid') && isfield(T.best, 'kThreshHybrid') && ~isnan(T.best.kThreshHybrid)
+            o.kThresh = T.best.kThreshHybrid;
+        end
+    end
+    if isfield(o, 'kThresh'), fprintf('  kThresh for this mode: %.2f\n', o.kThresh); end
     fprintf('\n================ mode: %s ================\n', upper(modes{m}));
     E{m} = evaluateSystem(dataDir, nRefs, o);
 end

@@ -255,10 +255,23 @@ showPlaceholder(axTest, 'no test signature loaded');
             'Message', sprintf('Preprocessing and extracting features from %d specimens...', ...
             numel(paths)), 'Indeterminate', 'on');
         opts = struct();
-        clfFile = fullfile(fileparts(mfilename('fullpath')), 'models', 'classifier.mat');
+        rootDir = fileparts(mfilename('fullpath'));
+        clfFile = fullfile(rootDir, 'models', 'classifier.mat');
         if exist(clfFile, 'file')
             opts.classifier = clfFile;
             opts.mode = 'hybrid';
+        end
+        tunedFile = fullfile(rootDir, 'results', 'tunedParams.mat');
+        if exist(tunedFile, 'file')
+            T = load(tunedFile, 'best');
+            opts.weights = T.best.weights;
+            opts.minThr  = T.best.minThr;
+            opts.maxThr  = T.best.maxThr;
+            opts.kThresh = T.best.kThresh;
+            if isfield(opts, 'classifier') && isfield(T.best, 'kThreshHybrid') ...
+                    && ~isnan(T.best.kThreshHybrid)
+                opts.kThresh = T.best.kThreshHybrid;
+            end
         end
         try
             model = enrollUser(paths, uid, opts);
