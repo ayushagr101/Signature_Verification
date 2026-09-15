@@ -5,16 +5,31 @@ dataDir    = fullfile(pwd, 'data');
 resultsDir = fullfile(pwd, 'results');
 if ~exist(resultsDir, 'dir'), mkdir(resultsDir); end
 
+nRefs = 4;
+
 enrolOpts = struct();
 tunedFile = fullfile(resultsDir, 'tunedParams.mat');
 if exist(tunedFile, 'file')
     T = load(tunedFile, 'best');
     enrolOpts.weights = T.best.weights;
     enrolOpts.kThresh = T.best.kThresh;
-    fprintf('Using tuned parameters: weights [%.1f %.1f], kThresh %.2f  (from %s)\n', ...
-            enrolOpts.weights(1), enrolOpts.weights(2), enrolOpts.kThresh, tunedFile);
+    fprintf('Using tuned parameters: weights [%.1f %.1f], kThresh %.2f\n', ...
+            enrolOpts.weights(1), enrolOpts.weights(2), enrolOpts.kThresh);
 else
     fprintf('Using default parameters - run tuneParameters to tune them.\n');
+end
+
+clfFile = fullfile(pwd, 'models', 'classifier.mat');
+modes = {'dsp'};
+clf = [];
+if exist(clfFile, 'file')
+    C = load(clfFile, 'clf');
+    clf = C.clf;
+    modes = {'dsp', 'ml', 'hybrid'};
+    fprintf('Classifier found (%s, CV EER %.2f %%) - evaluating dsp / ml / hybrid.\n', ...
+            clf.type, clf.cvEER);
+else
+    fprintf('No classifier found - DSP-only evaluation. Run trainClassifier to add ML.\n');
 end
 
 writers = dir(fullfile(dataDir, 'writer*'));
@@ -28,101 +43,36 @@ end
 if ~hasImages
     fprintf('No dataset found - generating a synthetic one...\n\n');
     makeSignatureDataset(dataDir, 3, 8, 5, 7);
-    writers = dir(fullfile(dataDir, 'writer*'));
-    writers = writers([writers.isdir]);
 end
 
-nRefs = 4;
-
-allScores = [];
-allLabels = [];
-allTypes  = {};
-allDec    = [];
-
-models = struct('userId', {}, 'thr', {});
-
-for w = 1:numel(writers)
-    wdir = fullfile(dataDir, writers(w).name);
-
-    gen  = dir(fullfile(wdir, 'genuine_*.png'));
-    skf  = dir(fullfile(wdir, 'forged_skilled_*.png'));
-    rnf  = dir(fullfile(wdir, 'forged_random_*.png'));
-    gen  = fullfile(wdir, {gen.name});
-    skf  = fullfile(wdir, {skf.name});
-    rnf  = fullfile(wdir, {rnf.name});
-
-    if numel(gen) < nRefs + 1
-        warning('Skipping %s: not enough genuine samples.', writers(w).name);
-        continue;
-    end
-
-    refs  = gen(1:nRefs);
-    tests = gen(nRefs+1:end);
-
-    fprintf('\n================ %s ================\n', writers(w).name);
-    model = enrollUser(refs, writers(w).name, enrolOpts);
-    models(end+1) = struct('userId', model.userId, 'thr', model.thr);
-
-    probes = [tests, skf, rnf];
-    labels = [ones(1, numel(tests)), zeros(1, numel(skf) + numel(rnf))];
-    types  = [repmat({'genuine'}, 1, numel(tests)), ...
-              repmat({'skilled'}, 1, numel(skf)), ...
-              repmat({'random'},  1, numel(rnf))];
-
-    for i = 1:numel(probes)
-        R = verifySignature(model, probes{i}, false);
-        allScores(end+1) = R.score;
-        allLabels(end+1) = labels(i);
-        allTypes{end+1}  = types{i};
-        allDec(end+1)    = R.isAuthentic;
-    end
-
-    if w == 1
-        verifySignature(model, tests{1}, true);
-        saveas(gcf, fullfile(resultsDir, 'example_genuine.png'));
-        verifySignature(model, skf{1}, true);
-        saveas(gcf, fullfile(resultsDir, 'example_skilled_forgery.png'));
-        firstModel = model;
-    end
+E = cell(1, numel(modes));
+for m = 1:numel(modes)
+    o = enrolOpts;
+    o.mode = modes{m};
+    if ~strcmp(modes{m}, 'dsp'), o.classifier = clf; end
+    fprintf('\n================ mode: %s ================\n', upper(modes{m}));
+    E{m} = evaluateSystem(dataDir, nRefs, o);
 end
-
-gIdx = allLabels == 1;
-fIdx = allLabels == 0;
-
-FRR = 100 * mean(~allDec(gIdx));
-FAR = 100 * mean( allDec(fIdx));
-ACC = 100 * mean(allDec == allLabels);
 
 fprintf('\n==================== SYSTEM PERFORMANCE ====================\n');
-fprintf('  test samples          : %d genuine, %d forged\n', ...
-        sum(gIdx), sum(fIdx));
-fprintf('  FRR (false rejection) : %.2f %%\n', FRR);
-fprintf('  FAR (false acceptance): %.2f %%\n', FAR);
-fprintf('  overall accuracy      : %.2f %%\n', ACC);
-
-isSk = strcmp(allTypes, 'skilled');
-isRn = strcmp(allTypes, 'random');
-fprintf('  mean score  genuine   : %.3f\n', mean(allScores(gIdx)));
-if any(isSk)
-    fprintf('  mean score  skilled   : %.3f  (accepted %.1f %%)\n', ...
-        mean(allScores(isSk)), 100*mean(allDec(isSk)));
+fprintf('  test samples: %d genuine, %d forged\n\n', E{1}.nGenuine, E{1}.nForged);
+fprintf('  %-8s %8s %8s %8s %8s %10s %10s\n', 'mode', 'FRR%', 'FAR%', 'ACC%', ...
+        'EER%', 'skilledFAR', 'randomFAR');
+for m = 1:numel(modes)
+    fprintf('  %-8s %8.2f %8.2f %8.2f %8.2f %10.2f %10.2f\n', modes{m}, ...
+            E{m}.FRR, E{m}.FAR, E{m}.ACC, E{m}.EER, E{m}.skilledFAR, E{m}.randomFAR);
 end
-if any(isRn)
-    fprintf('  mean score  random    : %.3f  (accepted %.1f %%)\n', ...
-        mean(allScores(isRn)), 100*mean(allDec(isRn)));
-end
-
-th  = linspace(0, 1, 501);
-far = zeros(size(th)); frr = zeros(size(th));
-for k = 1:numel(th)
-    far(k) = mean(allScores(fIdx) >= th(k));
-    frr(k) = mean(allScores(gIdx) <  th(k));
-end
-[~, ke] = min(abs(far - frr));
-EER = 100 * (far(ke) + frr(ke)) / 2;
-fprintf('  equal error rate (EER): %.2f %%  at threshold %.3f\n', ...
-        EER, th(ke));
 fprintf('============================================================\n');
+
+P = E{end};
+primaryMode = modes{end};
+
+verifySignature(P.example.model, P.example.genuine, true);
+saveas(gcf, fullfile(resultsDir, 'example_genuine.png'));
+if ~isempty(P.example.forged)
+    verifySignature(P.example.model, P.example.forged, true);
+    saveas(gcf, fullfile(resultsDir, 'example_skilled_forgery.png'));
+end
 
 BG = [0.08 0.08 0.10];
 FG = [0.92 0.92 0.94];
@@ -130,44 +80,56 @@ GR = [0.35 0.35 0.40];
 CG = [0.25 0.85 0.45];
 CF = [0.95 0.35 0.30];
 CB = [0.30 0.75 1.00];
+CM = {[0.30 0.75 1.00], [1.00 0.60 0.20], [0.25 0.85 0.45]};
 
-figure('Name','Score distribution','Color',BG,'InvertHardcopy','off');
+gIdx = P.labels == 1; fIdx = P.labels == 0;
+
+figure('Name', sprintf('Score distribution (%s)', primaryMode), ...
+       'Color', BG, 'InvertHardcopy', 'off');
 edges = 0:0.025:1;
-histogram(allScores(gIdx), edges, 'FaceColor', CG, ...
-          'EdgeColor', BG, 'FaceAlpha', 0.75); hold on;
-histogram(allScores(fIdx), edges, 'FaceColor', CF, ...
-          'EdgeColor', BG, 'FaceAlpha', 0.75);
-yl = ylim; plot([th(ke) th(ke)], yl, '--', 'Color', FG, 'LineWidth', 2);
-xlabel('fused similarity score','Color',FG);
-ylabel('count','Color',FG);
-lg = legend('genuine','forged','EER threshold','Location','northwest');
+histogram(P.scores(gIdx), edges, 'FaceColor', CG, 'EdgeColor', BG, 'FaceAlpha', 0.75);
+hold on;
+histogram(P.scores(fIdx), edges, 'FaceColor', CF, 'EdgeColor', BG, 'FaceAlpha', 0.75);
+yl = ylim; plot([P.th(P.ke) P.th(P.ke)], yl, '--', 'Color', FG, 'LineWidth', 2);
+xlabel('fused similarity score', 'Color', FG); ylabel('count', 'Color', FG);
+lg = legend('genuine', 'forged', 'EER threshold', 'Location', 'northwest');
 set(lg, 'TextColor', FG, 'Color', BG, 'EdgeColor', GR);
-title('Genuine vs forged score separation','Color',FG); grid on;
-set(gca,'Color',BG,'XColor',FG,'YColor',FG,'GridColor',GR,'GridAlpha',0.5);
+title(sprintf('Genuine vs forged score separation  [%s]', primaryMode), 'Color', FG);
+grid on;
+set(gca, 'Color', BG, 'XColor', FG, 'YColor', FG, 'GridColor', GR, 'GridAlpha', 0.5);
 saveas(gcf, fullfile(resultsDir, 'score_distribution.png'));
 
-figure('Name','FAR / FRR / ROC','Color',BG,'InvertHardcopy','off');
+figure('Name', 'FAR / FRR / ROC', 'Color', BG, 'InvertHardcopy', 'off', ...
+       'Position', [100 100 1000 420]);
 subplot(1,2,1);
-plot(th, 100*far, 'Color', CF, 'LineWidth', 1.8); hold on;
-plot(th, 100*frr, 'Color', CB, 'LineWidth', 1.8);
-plot(th(ke), 100*far(ke), 'o', 'Color', FG, 'MarkerFaceColor', FG);
-xlabel('threshold','Color',FG); ylabel('error rate (%)','Color',FG);
-lg = legend('FAR','FRR','EER','Location','best');
+plot(P.th, 100*P.far, 'Color', CF, 'LineWidth', 1.8); hold on;
+plot(P.th, 100*P.frr, 'Color', CB, 'LineWidth', 1.8);
+plot(P.th(P.ke), 100*P.far(P.ke), 'o', 'Color', FG, 'MarkerFaceColor', FG);
+xlabel('threshold', 'Color', FG); ylabel('error rate (%)', 'Color', FG);
+lg = legend('FAR', 'FRR', 'EER', 'Location', 'best');
 set(lg, 'TextColor', FG, 'Color', BG, 'EdgeColor', GR);
-title(sprintf('EER = %.2f %%', EER),'Color',FG); grid on;
-set(gca,'Color',BG,'XColor',FG,'YColor',FG,'GridColor',GR,'GridAlpha',0.5);
+title(sprintf('[%s]  EER = %.2f %%', primaryMode, P.EER), 'Color', FG); grid on;
+set(gca, 'Color', BG, 'XColor', FG, 'YColor', FG, 'GridColor', GR, 'GridAlpha', 0.5);
 
 subplot(1,2,2);
-plot(100*far, 100*(1-frr), 'Color', CB, 'LineWidth', 2); hold on;
-plot([0 100],[0 100],':','Color',GR,'LineWidth',1.2);
-xlabel('FAR (%)','Color',FG);
-ylabel('genuine acceptance rate (%)','Color',FG);
-title('ROC curve','Color',FG); grid on; axis([0 100 0 100]);
-set(gca,'Color',BG,'XColor',FG,'YColor',FG,'GridColor',GR,'GridAlpha',0.5);
+hold on;
+names = cell(1, numel(modes));
+for m = 1:numel(modes)
+    plot(100*E{m}.far, 100*(1-E{m}.frr), 'Color', CM{m}, 'LineWidth', 2);
+    names{m} = sprintf('%s  (EER %.1f%%)', modes{m}, E{m}.EER);
+end
+plot([0 100], [0 100], ':', 'Color', GR, 'LineWidth', 1.2);
+xlabel('FAR (%)', 'Color', FG); ylabel('genuine acceptance rate (%)', 'Color', FG);
+title('ROC curve', 'Color', FG); grid on; axis([0 100 0 100]);
+lg = legend(names, 'Location', 'southeast');
+set(lg, 'TextColor', FG, 'Color', BG, 'EdgeColor', GR);
+set(gca, 'Color', BG, 'XColor', FG, 'YColor', FG, 'GridColor', GR, 'GridAlpha', 0.5);
 saveas(gcf, fullfile(resultsDir, 'roc_far_frr.png'));
 
-save(fullfile(resultsDir, 'results.mat'), ...
-     'allScores', 'allLabels', 'allTypes', 'allDec', 'FAR', 'FRR', ...
-     'ACC', 'EER', 'models');
+summary = struct();
+for m = 1:numel(modes)
+    summary.(modes{m}) = rmfield(E{m}, {'models', 'example'});
+end
+save(fullfile(resultsDir, 'results.mat'), 'summary', 'modes', 'nRefs', 'enrolOpts');
 fprintf('\nFigures and results.mat saved in %s\n', resultsDir);
 fprintf('Launch the GUI with:  signatureGUI\n');

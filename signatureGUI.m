@@ -107,17 +107,17 @@ styleBarAxes(barAx);
 
 mblk = uipanel(dec, 'BackgroundColor', CARD, 'BorderType', 'none');
 mblk.Layout.Column = 3;
-mg = uigridlayout(mblk, [6 2]);
+mg = uigridlayout(mblk, [7 2]);
 mg.ColumnWidth = {'1x', 90};
-mg.RowHeight = repmat({'1x'}, 1, 6);
+mg.RowHeight = repmat({'1x'}, 1, 7);
 mg.BackgroundColor = CARD;
 mg.Padding = [16 10 16 10];
 mg.RowSpacing = 2;
 
-metricNames = {'Fused score', 'Threshold', 'Feature similarity', ...
-               'Cross-correlation', 'Feature distance', 'Confidence'};
-metricVals  = gobjects(1, 6);
-for i = 1:6
+metricNames = {'Fused score', 'DSP score', 'ML probability', 'Threshold', ...
+               'Feature similarity', 'Cross-correlation', 'Confidence'};
+metricVals  = gobjects(1, 7);
+for i = 1:7
     n = uilabel(mg, 'Text', metricNames{i}, 'FontSize', 13, 'FontColor', DIM);
     n.Layout.Row = i; n.Layout.Column = 1;
     v = uilabel(mg, 'Text', char(8212), 'FontSize', 14, 'FontColor', FG, ...
@@ -228,7 +228,7 @@ showPlaceholder(axTest, 'no test signature loaded');
         lblDecision.FontColor = DIM;
         lblConf.Text = 'Enrol a writer, load a test signature, then verify.';
         lblConf.FontColor = DIM;
-        for i = 1:6, metricVals(i).Text = char(8212); metricVals(i).FontColor = FG; end
+        for i = 1:7, metricVals(i).Text = char(8212); metricVals(i).FontColor = FG; end
         cla(barAx); styleBarAxes(barAx);
         lastR = [];
     end
@@ -254,8 +254,14 @@ showPlaceholder(axTest, 'no test signature loaded');
         dlg = uiprogressdlg(fig, 'Title', 'Enrolling writer', ...
             'Message', sprintf('Preprocessing and extracting features from %d specimens...', ...
             numel(paths)), 'Indeterminate', 'on');
+        opts = struct();
+        clfFile = fullfile(fileparts(mfilename('fullpath')), 'models', 'classifier.mat');
+        if exist(clfFile, 'file')
+            opts.classifier = clfFile;
+            opts.mode = 'hybrid';
+        end
         try
-            model = enrollUser(paths, uid, struct());
+            model = enrollUser(paths, uid, opts);
         catch ME
             close(dlg);
             uialert(fig, ME.message, 'Enrolment failed');
@@ -264,10 +270,12 @@ showPlaceholder(axTest, 'no test signature loaded');
         close(dlg);
 
         showInk(axRef, model.refImgs{1}, INK);
-        capRef.Text = sprintf('%s   \x00B7   %d specimens on file   \x00B7   threshold %.3f', ...
+        capRef.Text = sprintf(['%s' DOT '%d specimens on file' DOT 'threshold %.3f'], ...
                               uid, model.nSamples, model.thr);
         chipDot.FontColor = COK;
-        chipTxt.Text = sprintf('Account: %s', uid);
+        modeTxt = 'DSP';
+        if ~isempty(model.clf), modeTxt = 'DSP + ML hybrid'; end
+        chipTxt.Text = sprintf('Account: %s   [%s]', uid, modeTxt);
         t = model.thr * 100;
         gauge.ScaleColorLimits = [0 t; t 100];
         resetDecision();
@@ -318,7 +326,7 @@ showPlaceholder(axTest, 'no test signature loaded');
         gauge.Value = R.score * 100;
         lblDecision.Text = word;
         lblDecision.FontColor = col;
-        lblConf.Text = sprintf('%.1f%% confidence   \x00B7   score %.3f vs threshold %.3f', ...
+        lblConf.Text = sprintf(['%.1f%% confidence' DOT 'score %.3f vs threshold %.3f'], ...
                                R.confidence, R.score, R.threshold);
         lblConf.FontColor = FG;
 
@@ -329,12 +337,14 @@ showPlaceholder(axTest, 'no test signature loaded');
              'Color', FG, 'LineWidth', 2);
         hold(barAx, 'off');
 
-        vals = {sprintf('%.3f', R.score), sprintf('%.3f', R.threshold), ...
-                sprintf('%.3f', R.featureSim), sprintf('%.3f', R.corrSim), ...
-                sprintf('%.3f', R.distance), sprintf('%.1f %%', R.confidence)};
-        for i = 1:6, metricVals(i).Text = vals{i}; metricVals(i).FontColor = FG; end
+        mlTxt = char(8212);
+        if ~isnan(R.mlProb), mlTxt = sprintf('%.3f', R.mlProb); end
+        vals = {sprintf('%.3f', R.score), sprintf('%.3f', R.dspScore), mlTxt, ...
+                sprintf('%.3f', R.threshold), sprintf('%.3f', R.featureSim), ...
+                sprintf('%.3f', R.corrSim), sprintf('%.1f %%', R.confidence)};
+        for i = 1:7, metricVals(i).Text = vals{i}; metricVals(i).FontColor = FG; end
         metricVals(1).FontColor = col;
-        metricVals(6).FontColor = col;
+        metricVals(7).FontColor = col;
 
         showInk(axTest, R.B, ternary(R.isAuthentic, CTST, CREF));
         lblStatus.Text = sprintf('Verified %s against account %s.', ...

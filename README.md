@@ -133,3 +133,53 @@ from `main_signature_verification` stay honest:
 
 It sweeps feature weight 0..1 and `kThresh` 0..3, reporting FAR / FRR / HTER
 per grid point and the threshold-free EER per weight setting.
+
+## Adding the ML classifier (writer-independent)
+
+The DSP system is *writer-dependent*: each account has its own template and
+nothing is learned across writers. `trainClassifier` adds a
+*writer-independent* layer on top of the same DSP features:
+
+1. For every (enrolled model, test signature) pair it builds a 126-D
+   **difference vector** — the z-scored |f_test − μ_ref| for all 121 features,
+   plus min/median/max reference distance, feature similarity and
+   cross-correlation.
+2. It trains one classifier on those vectors: label 1 = genuine pair,
+   0 = forgery pair. RBF-SVM (`fitcsvm`, Statistics Toolbox) when available,
+   otherwise a built-in L2-regularised logistic regression.
+3. Because the classifier learns "how do genuine pairs differ from forged
+   pairs" *in general*, a new customer needs no retraining — enrol as usual.
+
+```matlab
+>> trainClassifier                  % trains on data_train/ (synthetic, seed 23)
+>> main_signature_verification      % now reports dsp / ml / hybrid side by side
+```
+
+Three scoring modes exist from then on (`opts.mode` in `enrollUser`):
+
+| mode | score |
+|---|---|
+| `dsp` | 0.6·featureSim + 0.4·corrSim (original) |
+| `ml` | classifier probability |
+| `hybrid` | mean of the two (default once a classifier exists) |
+
+The per-writer leave-one-out threshold calibration works unchanged in every
+mode. `trainClassifier` reports **leave-one-writer-out** EER, which is the
+honest number for a writer-independent model.
+
+### Real data (CEDAR)
+
+Synthetic forgeries come from the same generator as the genuine samples, so a
+classifier trained on them learns the generator, not real forgers. For
+meaningful ML numbers use the CEDAR database (55 writers × 24 genuine × 24
+skilled forgeries, free from cedar.buffalo.edu or the Kaggle mirror):
+
+```matlab
+>> importCEDAR('C:\path\to\signatures', 'data_train', 1:35)   % training writers
+>> importCEDAR('C:\path\to\signatures', 'data',       36:55)  % held-out writers
+>> trainClassifier('data_train', 6)
+>> main_signature_verification
+```
+
+The train/test split is by **writer**, so no test writer is ever seen during
+training.

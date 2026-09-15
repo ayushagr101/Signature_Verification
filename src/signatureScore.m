@@ -28,13 +28,36 @@ if ~isempty(B) && isfield(model, 'refImgs')
 end
 
 w = model.weights;
-score = w(1)*featureSim + w(2)*corrSim;
+dsp = min(max(w(1)*featureSim + w(2)*corrSim, 0), 1);
+
+muK = mean(F, 2);
+z = abs(f - muK) ./ sigma;
+pairFeat = [z; min(d); median(d); max(d); featureSim; corrSim];
 
 S.featureDistance = dRef;
 S.featureSim      = featureSim;
 S.corrSim         = corrSim;
-S.score           = min(max(score, 0), 1);
 S.perRefDistance  = d;
+S.pairFeat        = pairFeat;
+S.dspScore        = dsp;
+S.mlProb          = NaN;
+S.score           = dsp;
+
+if isfield(model, 'clf') && ~isempty(model.clf)
+    p = classifierScore(model.clf, pairFeat');
+    S.mlProb = p;
+    mode = 'hybrid';
+    if isfield(model, 'mode') && ~isempty(model.mode), mode = model.mode; end
+    switch lower(mode)
+        case 'ml'
+            S.score = p;
+        case 'hybrid'
+            S.score = 0.5*dsp + 0.5*p;
+        otherwise
+            S.score = dsp;
+    end
+end
+S.score = min(max(S.score, 0), 1);
 end
 
 function c = peakNCC(A, B)

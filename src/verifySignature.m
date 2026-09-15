@@ -1,6 +1,7 @@
-function R = verifySignature(model, testImage, showPlot)
+function R = verifySignature(model, testImage, showPlot, quiet)
 
 if nargin < 3, showPlot = false; end
+if nargin < 4, quiet = false; end
 
 [B, info] = preprocessSignature(testImage, model.prep);
 [f, ~, parts] = extractFeatures(B);
@@ -24,19 +25,30 @@ R.confidence  = conf;
 R.featureSim  = S.featureSim;
 R.corrSim     = S.corrSim;
 R.distance    = S.featureDistance;
+R.dspScore    = S.dspScore;
+R.mlProb      = S.mlProb;
+R.mode        = 'dsp';
+if isfield(model, 'mode') && ~isempty(model.mode), R.mode = model.mode; end
 R.B           = B;
 R.f           = f;
 R.parts       = parts;
 R.prepInfo    = info;
 
-fprintf('\n--- Signature verification: account %s ---\n', model.userId);
-fprintf('  feature similarity : %.3f  (normalized distance %.3f)\n', ...
-        S.featureSim, S.featureDistance);
-fprintf('  cross-correlation  : %.3f\n', S.corrSim);
-fprintf('  fused score        : %.3f   (threshold %.3f)\n', ...
-        S.score, model.thr);
-fprintf('  DECISION           : %s   (confidence %.1f%%)\n\n', ...
-        R.decision, conf);
+if ~quiet
+    fprintf('\n--- Signature verification: account %s [%s] ---\n', ...
+            model.userId, R.mode);
+    fprintf('  feature similarity : %.3f  (normalized distance %.3f)\n', ...
+            S.featureSim, S.featureDistance);
+    fprintf('  cross-correlation  : %.3f\n', S.corrSim);
+    fprintf('  DSP score          : %.3f\n', S.dspScore);
+    if ~isnan(S.mlProb)
+        fprintf('  ML probability     : %.3f\n', S.mlProb);
+    end
+    fprintf('  fused score        : %.3f   (threshold %.3f)\n', ...
+            S.score, model.thr);
+    fprintf('  DECISION           : %s   (confidence %.1f%%)\n\n', ...
+            R.decision, conf);
+end
 
 if showPlot
     plotVerification(model, R);

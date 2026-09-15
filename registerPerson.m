@@ -11,6 +11,13 @@ addpath(fullfile(root, 'src'));
 modelDir = fullfile(root, 'models');
 if ~exist(modelDir, 'dir'), mkdir(modelDir); end
 
+clfFile = fullfile(modelDir, 'classifier.mat');
+if ~isfield(opts, 'classifier') && exist(clfFile, 'file')
+    opts.classifier = clfFile;
+    if ~isfield(opts, 'mode'), opts.mode = 'hybrid'; end
+    fprintf('Using trained classifier (hybrid mode).\n');
+end
+
 accountId = char(accountId);
 target = fullfile(modelDir, [safeName(accountId) '.mat']);
 

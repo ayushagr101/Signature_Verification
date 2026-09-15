@@ -7,6 +7,8 @@ if ~isfield(opts, 'weights'), opts.weights = [0.6 0.4]; end
 if ~isfield(opts, 'kThresh'), opts.kThresh = 1.4; end
 if ~isfield(opts, 'minThr'),  opts.minThr  = 0.35; end
 if ~isfield(opts, 'maxThr'),  opts.maxThr  = 0.90; end
+if ~isfield(opts, 'mode'),    opts.mode    = 'dsp'; end
+if ~isfield(opts, 'classifier'), opts.classifier = []; end
 
 if (ischar(samples) || isstring(samples)) && isfolder(char(samples))
     samples = listImages(char(samples));
@@ -48,7 +50,6 @@ model.prep      = opts.prep;
 model.nSamples  = N;
 model.createdAt = datestr(now, 'yyyy-mm-dd HH:MM:SS');
 
-dsum = [];
 dlist = [];
 for i = 1:N
     for j = i+1:N
@@ -58,6 +59,19 @@ for i = 1:N
 end
 model.d0 = max(mean(dlist), 1e-3);
 model.intraDistances = dlist;
+
+model.mode = 'dsp';
+model.clf  = [];
+if ~isempty(opts.classifier)
+    c = opts.classifier;
+    if ischar(c) || isstring(c)
+        T = load(char(c), 'clf');
+        c = T.clf;
+    end
+    model.clf  = c;
+    model.mode = opts.mode;
+    if strcmpi(model.mode, 'dsp'), model.mode = 'hybrid'; end
+end
 
 loo = zeros(1, N);
 for i = 1:N
@@ -70,8 +84,8 @@ thr = min(max(thr, opts.minThr), opts.maxThr);
 model.looScores = loo;
 model.thr       = thr;
 
-fprintf(['Enrolled "%s": %d reference samples, %d features, ' ...
-         'threshold = %.3f\n'], userId, N, size(F,1), thr);
+fprintf(['Enrolled "%s" [%s]: %d reference samples, %d features, ' ...
+         'threshold = %.3f\n'], userId, model.mode, N, size(F,1), thr);
 fprintf('  genuine leave-one-out scores: %s\n', ...
         strtrim(sprintf('%.3f ', loo)));
 end
