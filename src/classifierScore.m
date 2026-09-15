@@ -7,8 +7,12 @@ switch lower(clf.type)
     case 'logistic'
         p = 1 ./ (1 + exp(-(Xs * clf.w(2:end) + clf.w(1))));
     case 'svm'
-        [~, post] = predict(clf.svm, Xs);
-        p = post(:, 2);
+        [~, sc] = predict(clf.svm, Xs);
+        if isfield(clf, 'calibrated') && clf.calibrated
+            p = sc(:, 2);
+        else
+            p = 1 ./ (1 + exp(-sc(:, 2)));
+        end
     otherwise
         error('classifierScore:type', 'Unknown classifier type "%s".', clf.type);
 end

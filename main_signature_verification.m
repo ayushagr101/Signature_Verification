@@ -5,7 +5,7 @@ dataDir    = fullfile(pwd, 'data');
 resultsDir = fullfile(pwd, 'results');
 if ~exist(resultsDir, 'dir'), mkdir(resultsDir); end
 
-nRefs = 4;
+nRefs = 6;
 
 enrolOpts = struct();
 tunedFile = fullfile(resultsDir, 'tunedParams.mat');

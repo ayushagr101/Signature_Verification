@@ -9,13 +9,21 @@ opts = setDefault(opts, 'pad',        4);
 
 if ischar(I) || isstring(I)
     info.file = char(I);
-    I = imread(char(I));
+    [I, map] = imread(char(I));
+    if ~isempty(map)
+        I = ind2rgb(I, map);
+    end
 else
     info.file = '<matrix>';
 end
 
 if ndims(I) == 3
-    I = rgb2gray(I);
+    try
+        I = rgb2gray(I);
+    catch
+        I = 0.2989*double(I(:,:,1)) + 0.5870*double(I(:,:,2)) + 0.1140*double(I(:,:,3));
+        if max(I(:)) > 1, I = I / 255; end
+    end
 end
 if islogical(I)
     G = double(I);

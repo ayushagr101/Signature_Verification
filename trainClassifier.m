@@ -4,7 +4,7 @@ root = fileparts(mfilename('fullpath'));
 addpath(fullfile(root, 'src'));
 
 if nargin < 1 || isempty(trainDir), trainDir = fullfile(root, 'data_train'); end
-if nargin < 2 || isempty(nRefs),    nRefs    = 4; end
+if nargin < 2 || isempty(nRefs),    nRefs    = 6; end
 if nargin < 3 || isempty(method),   method   = 'auto'; end
 
 modelDir = fullfile(root, 'models');
@@ -70,7 +70,7 @@ for k = 1:nW
         Xtr = [Xtr; perWriter(j).X];
         ytr = [ytr; perWriter(j).y];
     end
-    c = fitModel(Xtr, ytr, method);
+    c = fitModel(Xtr, ytr, method, false);
     p = classifierScore(c, perWriter(k).X);
     cvScores = [cvScores; p(:)];
     cvLabels = [cvLabels; perWriter(k).y(:)];
@@ -83,7 +83,7 @@ for j = 1:nW
     Xall = [Xall; perWriter(j).X];
     yall = [yall; perWriter(j).y];
 end
-clf = fitModel(Xall, yall, method);
+clf = fitModel(Xall, yall, method, true);
 clf.featDim   = size(Xall, 2);
 clf.nTrain    = numel(yall);
 clf.nWriters  = nW;
@@ -124,7 +124,7 @@ set(gca, 'Color', BG, 'XColor', FG, 'YColor', FG, 'GridColor', GR, 'GridAlpha', 
 saveas(gcf, fullfile(resultsDir, 'classifier_cv.png'));
 end
 
-function clf = fitModel(X, y, method)
+function clf = fitModel(X, y, method, calibrate)
 mu = mean(X, 1);
 sd = std(X, 0, 1) + 1e-6;
 Xs = bsxfun(@rdivide, bsxfun(@minus, X, mu), sd);
@@ -138,8 +138,9 @@ if useSVM
         svm = fitcsvm(Xs, y, 'KernelFunction', 'rbf', 'KernelScale', 'auto', ...
                       'BoxConstraint', 1, 'ClassNames', [0 1], ...
                       'Standardize', false);
-        svm = fitPosterior(svm);
+        if calibrate, svm = fitPosterior(svm); end
         clf.type = 'svm';
+        clf.calibrated = calibrate;
         clf.svm  = svm;
         return;
     catch ME
