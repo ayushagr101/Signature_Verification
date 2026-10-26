@@ -1,8 +1,13 @@
 function signatureGUI()
 
-addpath(fullfile(fileparts(mfilename('fullpath')), 'src'));
+rootDir = fileparts(mfilename('fullpath'));
+addpath(fullfile(rootDir, 'src'));
 
-BG    = [0.07 0.07 0.09];
+logDir = fullfile(rootDir, 'logs');
+if ~exist(logDir, 'dir'), mkdir(logDir); end
+logFile = fullfile(logDir, 'signatureGUI.log');
+
+BG   = [0.07 0.07 0.09];
 PANEL = [0.12 0.12 0.15];
 CARD  = [0.16 0.16 0.20];
 BTN   = [0.22 0.22 0.27];
@@ -14,17 +19,18 @@ COK   = [0.25 0.85 0.45];
 CBAD  = [0.95 0.35 0.30];
 CREF  = [1.00 0.50 0.35];
 CTST  = [0.30 0.75 1.00];
-DOT   = ['   ' char(183) '   '];
+CBUSY = [0.98 0.75 0.25];
+DOT  = ['   ' char(183) '   '];
 
 model    = [];
 testPath = '';
 lastR    = [];
 
 fig = uifigure('Name', 'DSP Bank Signature Verification', ...
-    'Color', BG, 'Position', [80 60 1120 740]);
+    'Color', BG, 'Position', [80 40 1120 860]);
 
-root = uigridlayout(fig, [4 1]);
-root.RowHeight   = {52, '1x', 236, 64};
+root = uigridlayout(fig, [5 1]);
+root.RowHeight   = {52, '1x', 236, 120, 64};
 root.ColumnWidth = {'1x'};
 root.BackgroundColor = BG;
 root.Padding    = [18 14 18 14];
@@ -126,8 +132,20 @@ for i = 1:7
     metricVals(i) = v;
 end
 
+logPanel = uipanel(root, 'BackgroundColor', PANEL, 'BorderType', 'none');
+logPanel.Layout.Row = 4;
+lgg = uigridlayout(logPanel, [2 1]);
+lgg.RowHeight = {16, '1x'};
+lgg.BackgroundColor = PANEL;
+lgg.Padding = [16 8 16 10];
+lgg.RowSpacing = 4;
+uilabel(lgg, 'Text', 'ACTIVITY LOG', 'FontSize', 11, ...
+    'FontWeight', 'bold', 'FontColor', DIM);
+logBox = uitextarea(lgg, 'Editable', 'off', 'FontName', 'Consolas', ...
+    'FontSize', 11, 'BackgroundColor', CARD, 'FontColor', FG);
+
 ftr = uigridlayout(root, [1 5]);
-ftr.Layout.Row = 4;
+ftr.Layout.Row = 5;
 ftr.ColumnWidth = {'1x', 170, 170, 150, 210};
 ftr.BackgroundColor = BG;
 ftr.Padding = [0 0 0 0];
@@ -160,6 +178,60 @@ btnDetail.Layout.Column = 5;
 
 showPlaceholder(axRef,  'no reference loaded');
 showPlaceholder(axTest, 'no test signature loaded');
+logMsg('INFO', 'GUI started. Log file: %s', logFile);
+
+    function logMsg(level, varargin)
+        line = sprintf('%s  %-5s %s', datestr(now, 'HH:MM:SS'), level, ...
+                       sprintf(varargin{:}));
+        v = logBox.Value;
+        if isequal(v, {''}), v = {}; end
+        logBox.Value = [{line}; v(:)];   % newest first, no scrolling needed
+        fid = fopen(logFile, 'a');
+        if fid > 0
+            fprintf(fid, '%s %s\n', datestr(now, 'yyyy-mm-dd'), line);
+            fclose(fid);
+        end
+    end
+
+    function setStatus(msg, color)
+        if nargin < 2, color = DIM; end
+        lblStatus.Text = msg;
+        lblStatus.FontColor = color;
+    end
+
+    % Loading state: lock the buttons, show a progress dialog and an amber
+    % status line. Everything is restored when the returned object dies.
+    function c = busy(title, msg)
+        btns = [btnEnrol btnLoad btnVerify btnDetail];
+        set(btns, 'Enable', 'off');
+        setStatus([msg ' ...'], CBUSY);
+        dlg = uiprogressdlg(fig, 'Title', title, 'Message', msg, ...
+                            'Indeterminate', 'on');
+        drawnow;
+        c = onCleanup(@() unbusy(btns, dlg));
+    end
+
+    function unbusy(btns, dlg)
+        if isvalid(dlg), close(dlg); end
+        if isvalid(fig), set(btns, 'Enable', 'on'); end
+    end
+
+    % Error state: red status line, full error in the log, alert dialog.
+    function reportError(where, ME)
+        logMsg('ERROR', '%s failed: %s', where, ME.message);
+        if ~isempty(ME.identifier), logMsg('ERROR', '  id: %s', ME.identifier); end
+        if ~isempty(ME.stack)
+            logMsg('ERROR', '  at %s (line %d)', ME.stack(1).name, ME.stack(1).line);
+        end
+        setStatus(sprintf('%s failed: %s', where, ME.message), CBAD);
+        uialert(fig, ME.message, [where ' failed'], 'Icon', 'error');
+    end
+
+    function warnUser(msg, ttl)
+        logMsg('WARN', '%s', msg);
+        setStatus(msg, CBUSY);
+        uialert(fig, msg, ttl, 'Icon', 'warning');
+    end
 
     function [ax, cap] = makeImagePanel(parent, col, titleText)
         p = uipanel(parent, 'BackgroundColor', PANEL, 'BorderType', 'none');
@@ -236,7 +308,7 @@ showPlaceholder(axTest, 'no test signature loaded');
     function onEnrol(~, ~)
         d = uigetdir(pwd, 'Select the folder holding the genuine specimens');
         try, figure(fig); catch, end
-        if isequal(d, 0), return; end
+        if isequal(d, 0), logMsg('INFO', 'Enrolment cancelled.'); return; end
         files = dir(fullfile(d, 'genuine_*.png'));
         if numel(files) < 3
             files = [dir(fullfile(d,'*.png')); dir(fullfile(d,'*.jpg')); ...
@@ -244,22 +316,20 @@ showPlaceholder(axTest, 'no test signature loaded');
                      dir(fullfile(d,'*.tif'))];
         end
         if numel(files) < 3
-            uialert(fig, 'Need at least 3 genuine signature images in that folder.', ...
-                    'Enrolment');
+            warnUser(sprintf('Need at least 3 genuine signature images in %s (found %d).', ...
+                     d, numel(files)), 'Enrolment');
             return;
         end
         paths = fullfile(d, {files.name});
         [~, uid] = fileparts(d);
+        logMsg('INFO', 'Enrolling "%s" from %d specimens in %s', uid, numel(paths), d);
 
-        dlg = uiprogressdlg(fig, 'Title', 'Enrolling writer', ...
-            'Message', sprintf('Preprocessing and extracting features from %d specimens...', ...
-            numel(paths)), 'Indeterminate', 'on');
         opts = struct();
-        rootDir = fileparts(mfilename('fullpath'));
         clfFile = fullfile(rootDir, 'models', 'classifier.mat');
         if exist(clfFile, 'file')
             opts.classifier = clfFile;
             opts.mode = 'hybrid';
+            logMsg('INFO', 'Trained classifier found, using hybrid DSP + ML scoring.');
         end
         tunedFile = fullfile(rootDir, 'results', 'tunedParams.mat');
         if exist(tunedFile, 'file')
@@ -272,15 +342,27 @@ showPlaceholder(axTest, 'no test signature loaded');
                     && ~isnan(T.best.kThreshHybrid)
                 opts.kThresh = T.best.kThreshHybrid;
             end
+            logMsg('INFO', 'Tuned parameters: weights [%.1f %.1f], kThresh %.2f', ...
+                   opts.weights(1), opts.weights(2), opts.kThresh);
         end
+
+        c = busy('Enrolling writer', sprintf( ...
+            'Preprocessing and extracting features from %d specimens', numel(paths)));
+        t0 = tic;
         try
-            model = enrollUser(paths, uid, opts);
+            newModel = enrollUser(paths, uid, opts);
         catch ME
-            close(dlg);
-            uialert(fig, ME.message, 'Enrolment failed');
+            delete(c);
+            chipDot.FontColor = CBAD;
+            reportError('Enrolment', ME);
             return;
         end
-        close(dlg);
+        delete(c);
+        model = newModel;
+        logMsg('OK', 'Enrolled "%s" [%s] in %.1f s: %d features, threshold %.3f', ...
+               uid, model.mode, toc(t0), size(model.F, 1), model.thr);
+        logMsg('INFO', 'Leave-one-out genuine scores: %s', ...
+               strtrim(sprintf('%.3f ', model.looScores)));
 
         showInk(axRef, model.refImgs{1}, INK);
         capRef.Text = sprintf(['%s' DOT '%d specimens on file' DOT 'threshold %.3f'], ...
@@ -292,45 +374,75 @@ showPlaceholder(axTest, 'no test signature loaded');
         t = model.thr * 100;
         gauge.ScaleColorLimits = [0 t; t 100];
         resetDecision();
-        lblStatus.Text = 'Step 2: load the questioned signature image.';
+        if isempty(testPath)
+            setStatus('Step 2: load the questioned signature image.');
+        else
+            setStatus('Step 3: verify.');
+        end
     end
 
     function onLoad(~, ~)
         [fn, pn] = uigetfile({'*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff', ...
                               'Signature images'}, 'Select the test signature');
         try, figure(fig); catch, end
-        if isequal(fn, 0), return; end
-        testPath = fullfile(pn, fn);
+        if isequal(fn, 0), logMsg('INFO', 'Load cancelled.'); return; end
+        p = fullfile(pn, fn);
         prep = struct();
         if ~isempty(model), prep = model.prep; end
+
+        c = busy('Loading signature', sprintf('Reading and preprocessing %s', fn));
         try
-            Bt = preprocessSignature(testPath, prep);
-            showInk(axTest, Bt, INK);
+            [Bt, info] = preprocessSignature(p, prep);
         catch ME
-            uialert(fig, ME.message, 'Could not read image');
+            delete(c);
+            testPath = '';
+            capTest.Text = '';
+            resetDecision();
+            showPlaceholder(axTest, 'could not read this image');
+            reportError('Loading image', ME);
             return;
         end
+        delete(c);
+        testPath = p;
+        showInk(axTest, Bt, INK);
         capTest.Text = fn;
         resetDecision();
+        logMsg('OK', 'Loaded %s: Otsu level %.3f, deskew %.1f deg, %d ink pixels', ...
+               fn, info.otsuLevel, info.angle, info.inkPixels);
+        if info.inkPixels == 0
+            warnUser('No ink was found in this image. Is it a blank scan?', 'Load image');
+            return;
+        end
         if isempty(model)
-            lblStatus.Text = 'Now enrol a writer (step 1), then verify.';
+            setStatus('Now enrol a writer (step 1), then verify.');
         else
-            lblStatus.Text = 'Step 3: verify.';
+            setStatus('Step 3: verify.');
         end
     end
 
     function onVerify(~, ~)
         if isempty(model)
-            uialert(fig, 'Enrol a writer first.', 'Verify'); return;
+            warnUser('Enrol a writer first.', 'Verify'); return;
         end
         if isempty(testPath)
-            uialert(fig, 'Load a test signature first.', 'Verify'); return;
+            warnUser('Load a test signature first.', 'Verify'); return;
         end
+        c = busy('Verifying', sprintf('Scoring %s against account %s', ...
+                 capTest.Text, model.userId));
+        t0 = tic;
         try
-            R = verifySignature(model, testPath, false);
+            R = verifySignature(model, testPath, false, true);
         catch ME
-            uialert(fig, ME.message, 'Verification failed'); return;
+            delete(c);
+            resetDecision();
+            lblDecision.Text = 'ERROR';
+            lblDecision.FontColor = CBAD;
+            lblConf.Text = 'Verification could not be completed. See the activity log.';
+            lblConf.FontColor = CBAD;
+            reportError('Verification', ME);
+            return;
         end
+        delete(c);
         lastR = R;
 
         col = CBAD; word = 'FORGED';
@@ -360,16 +472,30 @@ showPlaceholder(axTest, 'no test signature loaded');
         metricVals(7).FontColor = col;
 
         showInk(axTest, R.B, ternary(R.isAuthentic, CTST, CREF));
-        lblStatus.Text = sprintf('Verified %s against account %s.', ...
-                                 capTest.Text, model.userId);
+        logMsg(ternary(R.isAuthentic, 'OK', 'ALERT'), ...
+               '%s vs %s: %s (score %.3f, threshold %.3f, confidence %.1f%%) in %.2f s', ...
+               capTest.Text, model.userId, word, R.score, R.threshold, ...
+               R.confidence, toc(t0));
+        setStatus(sprintf('Verified %s against account %s: %s.', ...
+                  capTest.Text, model.userId, word), col);
     end
 
     function onDetail(~, ~)
         if isempty(model) || isempty(testPath)
-            uialert(fig, 'Enrol a writer and load a test image first.', 'Analysis');
+            warnUser('Enrol a writer and load a test image first.', 'Analysis');
             return;
         end
-        verifySignature(model, testPath, true);
+        c = busy('DSP analysis', 'Building the analysis figure');
+        try
+            verifySignature(model, testPath, true, true);
+        catch ME
+            delete(c);
+            reportError('Analysis figure', ME);
+            return;
+        end
+        delete(c);
+        logMsg('INFO', 'Opened DSP analysis figure for %s.', capTest.Text);
+        setStatus('DSP analysis figure opened in a separate window.');
     end
 
     function v = ternary(c, a, b)
