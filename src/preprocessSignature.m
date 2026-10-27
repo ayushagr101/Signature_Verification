@@ -168,6 +168,11 @@ try
     return;
 catch
 end
+try
+    L = graphLabel(B);   % base MATLAB, compiled; the loop below is for Octave
+    return;
+catch
+end
 [h, w] = size(B);
 L = zeros(h, w);
 lab = 0;
@@ -191,6 +196,24 @@ for s = find(B(:))'
         end
     end
 end
+end
+
+function L = graphLabel(B)
+[h, w] = size(B);
+idx = find(B);
+id = zeros(h, w);
+id(idx) = 1:numel(idx);
+s = []; t = [];
+for d = [0 1; 1 0; 1 1; 1 -1]'
+    r = 1:h-d(1);
+    c = max(1, 1-d(2)):min(w, w-d(2));
+    P  = B(r, c) & B(r+d(1), c+d(2));
+    I1 = id(r, c);
+    I2 = id(r+d(1), c+d(2));
+    s = [s; I1(P)]; t = [t; I2(P)];
+end
+L = zeros(h, w);
+L(idx) = conncomp(graph(s, t, [], numel(idx)));
 end
 
 function B = bridgeGaps(B)
